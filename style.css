@@ -1,0 +1,143 @@
+
+/* Reset universale per gestire meglio le dimensioni */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: sans-serif;
+    display: flex;
+    justify-content: center;
+    margin-top: 0px;
+    background-color: #f0f0f0;
+}
+
+#container {
+    text-align: center;
+}
+
+#sudoku-grid {
+    border: 3px solid black;
+    border-collapse: collapse; /* Fondamentale per unire i bordi */
+    margin: 0 auto;
+    background-color: white;
+}
+
+#sudoku-grid td {
+    padding: 0; /* Rimuove lo spazio tra bordo cella e input */
+    border: 1px solid #ccc;
+    width: 50px;
+    height: 50px;
+}
+
+#sudoku-grid input {
+    width: 100%;          /* Prende tutto lo spazio della cella td */
+    height: 100%;         /* Prende tutto lo spazio della cella td */
+    text-align: center;
+    font-size: 22px;
+    border: none;         /* Rimuoviamo il bordo interno dell'input */
+    outline: none;
+    /*background: transparent;*/
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+/* Nasconde le freccette */
+#sudoku-grid input::-webkit-outer-spin-button,
+#sudoku-grid input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Classi per i blocchi 3x3 */
+.thick-right {
+    border-right: 3px solid black !important;
+}
+
+.thick-bottom {
+    border-bottom: 3px solid black !important;
+}
+.thick-left {
+    border-left: 3px solid black !important;
+}
+
+.thick-top {
+    border-top: 3px solid black !important;
+}
+
+/* Stile per i controlli e il log */
+#controls { margin-top: 20px; }
+/* Stile specifico per i bottoni dentro #controls */
+#controls button {
+    background-color: lightgreen; /* Il verde chiaro */
+    border: 1px solid #8fbc8f;  /* Un bordo sottile per dare definizione */
+    padding: 8px 16px;           /* Spazio interno per renderli cliccabili */
+    border-radius: 5px;          /* Angoli leggermente arrotondati */
+    cursor: pointer;             /* Il cursore cambia a manina al passaggio */
+    font-weight: bold;           /* Testo in grassetto */
+    transition: background 0.3s; /* Transizione fluida per l'effetto hover */
+}
+
+/* Effetto quando passi il mouse sopra il bottone */
+#controls button:hover {
+    background-color: #90ee90;   /* Un verde leggermente diverso al passaggio */
+    filter: brightness(90%);     /* Lo scurisce leggermente */
+}
+#memo1 { margin-top: 10px; font-family: monospace; width: 100%; }
+
+
+/* ... (tutto il resto del tuo CSS sopra rimane uguale) ... */
+
+/* 1. Reset Focus: Colore azzurrino standard quando clicchi per scrivere */
+#sudoku-grid input:focus {
+    outline: none !important;
+    background-color: #e8f0fe; 
+}
+
+/* 2. REGOLA D'ORO: Il giallo deve stare SOTTO il focus per non creare conflitti, 
+   ma con !important per vincere la priorità */
+
+/*table#sudoku-grid input.evidenziata, 
+table#sudoku-grid input.evidenziata:focus,
+table#sudoku-grid input.evidenziata:hover {
+    background-color: yellow !important;
+    box-shadow: inset 0 0 0 3px orange !important; 
+    display: block !important;
+    outline: none !important;
+    color: black !important; 
+}
+*/
+/* Impedisce al browser di forzare colori strani su campi già compilati */
+input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0px 1000px transparent inset !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+/* Test estremo: se questo non funziona, il CSS non sta leggendo la classe */
+.evidenziata {
+    background-color: red !important;
+    border: 5px solid blue !important;
+}
+/* Rimuovi ogni altra regola .evidenziata e metti QUESTA in fondo al file */
+#sudoku-grid input.evidenziata {
+    background-color: #ffff00 !important; /* Giallo acceso */
+    background: #ffff00 !important;      /* Forza anche la proprietà background */
+    box-shadow: inset 0 0 0 3px orange !important;
+    color: black !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+#cifraSel {
+    width: 5px;          /* Larghezza sufficiente per 2 cifre + padding */
+    padding: 2px;
+    text-align: center;
+    appearance: textfield; /* Rimuove stile nativo su alcuni browser */
+    -moz-appearance: textfield;
+}
+
+/* Rimuove le freccette su Chrome, Safari, Edge */
+#cifraSel::-webkit-outer-spin-button,
+#cifraSel::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}

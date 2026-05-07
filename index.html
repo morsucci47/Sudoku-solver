@@ -1,0 +1,1857 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Sudoku Solver - Porting Borland 6</title>
+    <link rel="stylesheet" href="style.css">
+
+    <meta name="viewport" content="width=device-width, initial-scale=0.8">
+    <style>
+			
+			/* Reset universale per gestire meglio le dimensioni */
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: sans-serif;
+			display: flex;
+			justify-content: center;
+			margin-top: 0px;
+			background-color: #f0f0f0;
+		}
+
+		#container {
+			text-align: center;
+		}
+
+		#sudoku-grid {
+			border: 3px solid black;
+			border-collapse: collapse; /* Fondamentale per unire i bordi */
+			margin: 0 auto;
+			background-color: white;
+		}
+
+		#sudoku-grid td {
+			padding: 0; /* Rimuove lo spazio tra bordo cella e input */
+			border: 1px solid #ccc;
+			width: 50px;
+			height: 50px;
+		}
+
+		#sudoku-grid input {
+			width: 100%;          /* Prende tutto lo spazio della cella td */
+			height: 100%;         /* Prende tutto lo spazio della cella td */
+			text-align: center;
+			font-size: 22px;
+			border: none;         /* Rimuoviamo il bordo interno dell'input */
+			outline: none;
+			/*background: transparent;*/
+			appearance: textfield;
+			-moz-appearance: textfield;
+		}
+
+		/* Nasconde le freccette */
+		#sudoku-grid input::-webkit-outer-spin-button,
+		#sudoku-grid input::-webkit-inner-spin-button {
+			-webkit-appearance: none;
+			margin: 0;
+		}
+
+		/* Classi per i blocchi 3x3 */
+		.thick-right {
+			border-right: 3px solid black !important;
+		}
+
+		.thick-bottom {
+			border-bottom: 3px solid black !important;
+		}
+		.thick-left {
+			border-left: 3px solid black !important;
+		}
+
+		.thick-top {
+			border-top: 3px solid black !important;
+		}
+
+		/* Stile per i controlli e il log */
+		#controls { margin-top: 20px; }
+		/* Stile specifico per i bottoni dentro #controls */
+		#controls button {
+			background-color: lightgreen; /* Il verde chiaro */
+			border: 1px solid #8fbc8f;  /* Un bordo sottile per dare definizione */
+			padding: 8px 16px;           /* Spazio interno per renderli cliccabili */
+			border-radius: 5px;          /* Angoli leggermente arrotondati */
+			cursor: pointer;             /* Il cursore cambia a manina al passaggio */
+			font-weight: bold;           /* Testo in grassetto */
+			transition: background 0.3s; /* Transizione fluida per l'effetto hover */
+		}
+
+		/* Effetto quando passi il mouse sopra il bottone */
+		#controls button:hover {
+			background-color: #90ee90;   /* Un verde leggermente diverso al passaggio */
+			filter: brightness(90%);     /* Lo scurisce leggermente */
+		}
+		#memo1 { margin-top: 10px; font-family: monospace; width: 100%; }
+
+
+		/* ... (tutto il resto del tuo CSS sopra rimane uguale) ... */
+
+		/* 1. Reset Focus: Colore azzurrino standard quando clicchi per scrivere */
+		#sudoku-grid input:focus {
+			outline: none !important;
+			background-color: #e8f0fe; 
+		}
+
+		/* 2. REGOLA D'ORO: Il giallo deve stare SOTTO il focus per non creare conflitti, 
+		   ma con !important per vincere la priorità */
+
+		/*table#sudoku-grid input.evidenziata, 
+		table#sudoku-grid input.evidenziata:focus,
+		table#sudoku-grid input.evidenziata:hover {
+			background-color: yellow !important;
+			box-shadow: inset 0 0 0 3px orange !important; 
+			display: block !important;
+			outline: none !important;
+			color: black !important; 
+		}
+		*/
+		/* Impedisce al browser di forzare colori strani su campi già compilati */
+		input:-webkit-autofill {
+			-webkit-box-shadow: 0 0 0px 1000px transparent inset !important;
+			transition: background-color 5000s ease-in-out 0s;
+		}
+		/* Test estremo: se questo non funziona, il CSS non sta leggendo la classe */
+		.evidenziata {
+			background-color: red !important;
+			border: 5px solid blue !important;
+		}
+		/* Rimuovi ogni altra regola .evidenziata e metti QUESTA in fondo al file */
+		#sudoku-grid input.evidenziata {
+			background-color: #ffff00 !important; /* Giallo acceso */
+			background: #ffff00 !important;      /* Forza anche la proprietà background */
+			box-shadow: inset 0 0 0 3px orange !important;
+			color: black !important;
+			opacity: 1 !important;
+			visibility: visible !important;
+		}
+
+		#cifraSel {
+			width: 5px;          /* Larghezza sufficiente per 2 cifre + padding */
+			padding: 2px;
+			text-align: center;
+			appearance: textfield; /* Rimuove stile nativo su alcuni browser */
+			-moz-appearance: textfield;
+		}
+
+		/* Rimuove le freccette su Chrome, Safari, Edge */
+		#cifraSel::-webkit-outer-spin-button,
+		#cifraSel::-webkit-inner-spin-button {
+			-webkit-appearance: none;
+			margin: 0;
+		}
+    </style>
+	
+	
+</head>
+
+<body onload="caricaListaSudoku()">
+
+<div id="container">
+        <h1 style="margin-top: 1px;">OrMa Sudoku Tutor</h1>
+        
+<table id="sudoku-grid" style="border: 3px solid black;">
+    <?php for($r=0; $r<9; $r++): ?>
+    <tr>
+        <?php for($c=0; $c<9; $c++): 
+            // Calcoliamo le classi per i bordi spessi  && $c < 8  && $r < 8
+            $classes = "";
+            if (($c + 1) % 3 == 0 ) $classes .= " thick-right";
+            if (($r + 1) % 3 == 0 ) $classes .= " thick-bottom";
+            if ($c == 0 ) $classes .= " thick-left";
+            if ($r == 0 ) $classes .= " thick-top";
+        ?>
+            <td class="<?php echo $classes; ?>">
+                <input type="number" min="1" max="9" id="cell-<?php echo "$r-$c"; ?>" autocomplete="off">
+            </td>
+        <?php endfor; ?>
+    </tr>
+    <?php endfor; ?>
+</table>
+<!--<label for="sudoku-progress">Avanzamento:</label>
+<progress id="progressBar" value="0" max="100"></progress>
+<span id="progressValue">0%</span>-->
+
+	<div id="sudoku-mask" style="width: 456px; margin: 5px auto;">
+		<h4 style="text-align: center; margin-bottom: 2px;">Opzioni di Ricerca</h4>
+		
+		<table style="width: 100%; border-collapse: collapse; border: none; table-layout: fixed;">
+			<tr>
+				<td style="vertical-align: top; padding: 5px; border: none;">
+					<label style="display: block; margin-bottom: 5px;text-align: left;"><input type="checkbox" id="righeChecked" checked> Righe</label>
+					<label style="display: block; margin-bottom: 5px;text-align: left;"><input type="checkbox" id="colonneChecked" checked> Colonne</label>
+					<label style="display: block; margin-bottom: 5px;text-align: left;"><input type="checkbox" id="quadriChecked" checked> Quadrati</label>
+				</td>
+
+				<td style="vertical-align: top; padding: 5px; border: none;">
+					<label style="display: block; margin-bottom: 5px;text-align: left;"><input type="checkbox" id="singoliChecked" checked> Unicità</label>
+					<label style="display: block; margin-bottom: 5px;text-align: left;"><input type="checkbox" id="biunicitaChecked" > Bi-unicità</label>
+					<label style="display: block; margin-bottom: 5px;text-align: left;"><input type="checkbox" id="doppiniChecked" > Doppini</label>
+				</td>
+
+				<td style="vertical-align: top; padding: 5px; border: none;">
+					<label style="display: block; margin-bottom: 5px;text-align: left;"><input type="checkbox" id="tripliniChecked" > Triplini</label>
+					<!--<hr style="margin: 5px 0; border: 0; border-top: 1px solid #ccc;">-->
+					<label style="display: block; margin-bottom: 5px;text-align: left;"><input type="checkbox" id="checkIntersChecked" > Intersezioni</label>
+					<label style="display: block; margin-bottom: 5px; text-align: left;">
+						<input type="number" id="cifraSel" style="width: 30px;"> SelXambig
+					</label>				
+				</td>
+			</tr>
+		</table>
+
+	</div>
+
+	<div id="controls">
+		<button onclick="reset()">Azzera</button>		
+		<input type="file" id="caricaFile" style="display:none" onchange="caricaSudoku(event)">
+		<!--&nbsp&nbsp&nbsp&nbsp-->
+		<button onclick="document.getElementById('caricaFile').click()">Importa</button>           		
+		<!--&nbsp&nbsp&nbsp&nbsp-->
+		<button onclick="salvaSudoku()">Esporta</button>
+		&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp
+		<button onclick="generaSudoku()">Crea</button>
+		<button onclick="togliTutto()">Togli</button>
+
+		<br>
+		<br>
+		<button onclick="eseguiGiro()">Possibilità</button>
+        <!--<button onclick="eseguiEliminaNple()">Elimina Nple</button>-->
+		<button onclick="risolviTutto()">Risolvi Tutto</button>			
+		&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp
+		<button onclick="comandoIndietro()">Indietro</button>
+		&nbsp&nbsp
+		<button onclick="Passo()">Passo</button>			
+		<br>
+		<br>
+		<button onclick="Ambiguita()">Ambiguità</button>
+		&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp
+		<button onclick="window.open('./doc/Sudoku_tecnicheA5.pdf', '_blank')">
+			Documentazione
+		</button>
+		<button onclick="window.open('./help/Introduzione.html', '_blank')">
+			Help
+		</button>
+		<button onclick="Esempio()">Demo</button>
+		<br>
+		<br>
+		<div id="sezione-salvataggio" style="margin: 1px 0; padding: 10px; border: 1px solid #ccc;">
+			<!--<h5>Registrazione</h5>-->
+			
+			<!--<label for="input-nome">Nome Sudoku:</label>-->
+			<input type="text" id="input-nome" placeholder="Nome del Sudoku">
+			
+			<!--<label for="select-livello">Liv.</label>&nbsp&nbsp&nbsp&nbsp-->
+			<select id="select-livello">
+				<option value="facile">Facile</option>
+				<option value="medio" selected>Medio</option>
+				<option value="difficile">Difficile</option>
+			</select>
+
+			<button onclick="preparaSalvataggio()">Registra</button>
+			<select id="menu-sudoku">
+				<option value="">...</option>
+			</select>		
+		</div>		
+		
+	</div>
+
+	<div id="log-window">
+		<!--<h3>Registro delle Operazioni</h3>-->
+		<textarea id="memo1" readonly rows="10" cols="50"></textarea>
+	</div>
+</div>
+
+
+
+<!--<textarea id="memo1" rows="10" cols="50" readonly placeholder="Log operazioni..."></textarea>-->
+
+	
+<script>
+// Questa variabile vive per tutta la durata della pagina
+let cronologiaStati = [];
+
+let state = {
+    numop: 0,
+    OKprint: true
+};
+// registra sudoku internamente
+function registraSudoku() {
+    // Trasformiamo la matrice in una stringa JSON per salvarla facilmente
+    localStorage.setItem('sudoku_save', JSON.stringify(mat));
+    console.log("Sudoku salvato nel browser!");
+}
+
+// Per recuperarlo:
+// let datiCaricati = JSON.parse(localStorage.getItem('sudoku_save'));
+
+//  Salva Sudoku
+function salvaSudoku() {
+    let contenuto = "";
+    let mat = getMatriceDallaGriglia();
+    
+    // Ciclo identico al tuo for in C++
+    for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+            // Aggiungiamo il numero e il ritorno a capo \n
+            contenuto += ` ${mat[i][j]}\n`;
+        }
+    }
+
+    // Creiamo un file virtuale (Blob)
+    const blob = new Blob([contenuto], { type: 'text/plain' });
+    const link = document.createElement("a");
+    
+    link.href = URL.createObjectURL(blob);
+    link.download = "sudoku.sav"; // Il nome del file
+    link.click(); // Avvia il download
+    
+    // Pulizia
+    URL.revokeObjectURL(link.href);
+}
+//  Legge il file sudoku.sav
+function caricaSudoku(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        const contenuto = e.target.result;
+        
+        // Trasformiamo la stringa in un array di numeri
+        // .split(/\s+/) divide la stringa ogni volta che trova spazi o invii (\n)
+        // .filter(x => x.length > 0) rimuove eventuali spazi vuoti
+        const numeri = contenuto.trim().split(/\s+/).map(Number);
+
+        if (numeri.length !== 81) {
+            alert("Errore: Il file non contiene 81 numeri!");
+            return;
+        }
+
+        // Ricostruiamo la matrice 9x9
+        let nuovaMatrice = [];
+        for (let i = 0; i < 9; i++) {
+            // Prendiamo una fetta di 9 numeri alla volta
+            nuovaMatrice.push(numeri.slice(i * 9, (i * 9) + 9));
+        }
+
+        // Ora 'nuovaMatrice' è pronta! 
+        // Puoi assegnarla alla tua variabile globale o aggiornare l'interfaccia
+        console.log("Matrice caricata:", nuovaMatrice);
+        scriviMatriceSuGriglia(nuovaMatrice,nuovaMatrice,"black"); 
+		// Resetta il valore dell'input così puoi ricaricare lo stesso file
+		event.target.value = "";
+    };
+    reader.readAsText(file);
+}
+// 1. Legge la griglia HTML e crea una matrice numerica
+
+function getMatriceDallaGriglia() {
+    let mat = [];
+    for (let r = 0; r < 9; r++) {
+        mat[r] = [];
+        for (let c = 0; c < 9; c++) {
+            let id = `cell-${r}-${c}`; // Definiamo l'id
+            let el = document.getElementById(id);
+            let v = "";
+
+            if (el) {
+                v = el.value; 
+            } else {
+                console.error("ERRORE CRITICO: Manca l'elemento HTML con ID: " + id);
+                // Non possiamo leggere .value se el è null, quindi v resta ""
+            }
+
+            // Trasformiamo il valore in numero (0 se vuoto o non valido)
+            mat[r][c] = (v === "" || isNaN(parseInt(v))) ? 0 : parseInt(v);
+        }
+    }
+    return mat;
+}
+
+
+// 2. Scrive la matrice sulla griglia HTML con colori diversi per i candidati
+function scriviMatriceSuGriglia(mat,mat_old,color) {
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+            let input = document.getElementById(`cell-${r}-${c}`);
+            if (mat[r][c] === 0) {
+                input.value = "";
+                input.style.color = "black";
+                input.style.fontSize = "22px";
+            } else if (mat[r][c] > 9) {
+                input.value = mat[r][c];
+                input.style.color = "blue";
+                input.style.fontSize = "11px"; // Più piccolo perché ci sono più cifre
+            } else if (mat[r][c] == mat_old[r][c]) {
+                input.value = mat[r][c];
+                input.style.color = "black";
+                input.style.fontSize = "22px"; 
+            } else {
+                input.value = mat[r][c];
+                input.style.color = color;
+                input.style.fontSize = "22px";
+            }
+        }
+    }
+}
+
+// 3. LOGICA PORTING BORLAND 6
+
+function eseguiGiro() {
+	
+	aggiornaStatoDallaMaschera(); // Carica tutto in 'state'
+	//inizializzaStatoSudoku(); // Carica tutto in 'state'
+    
+    let mat = getMatriceDallaGriglia();
+    let memo = document.getElementById("memo1");
+	let mat_old;
+
+	// Copia il CONTENUTO, non il riferimento
+	mat_old = structuredClone(mat);
+    // Ora usiamo state.singoliChecked invece di cercarlo ogni volta
+    //let okPrint = state.singoliChecked;	
+    //let okPrint = true;	
+	
+    // 1. Sincronizziamo lo stato con le checkbox della maschera
+    //aggiornaStatoDallaMaschera(); 
+
+    //let mat = getMatriceDallaGriglia();
+    //let memo = document.getElementById("memo1");
+   
+    // Usiamo lo state globale invece di variabili locali
+    if (state.numop === 0) memo.value = ""; // Pulisce solo all'inizio del primo giro
+
+    for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+            let num = mat[i][j];
+            
+            // Se la cella è vuota (0) o contiene candidati (es. 125)
+            if (num === 0 || num > 9) {
+                // Utilizziamo la tua funzione decodifica ufficiale
+                let possib = decodifica(num); 
+                
+                // Se era 0, inizializziamo a 123456789
+                if (num === 0) {
+                    possib = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+                }
+
+                // --- LOGICA DI FILTRAGGIO ---
+                // (Resta valida, ma usiamo la funzione eliminaDaPossib per coerenza)
+                
+                // Controllo Riga
+                for (let jj = 0; jj < 9; jj++) {
+                    if (jj !== j && mat[i][jj] > 0 && mat[i][jj] < 10) {
+                        possib = eliminaDaPossib(possib, mat[i][jj]);
+                    }
+                }
+                // Controllo Colonna
+                for (let ii = 0; ii < 9; ii++) {
+                    if (ii !== i && mat[ii][j] > 0 && mat[ii][j] < 10) {
+                        possib = eliminaDaPossib(possib, mat[ii][j]);
+                    }
+                }
+                // Controllo Quadrato
+                let imin = 3 * Math.floor(i / 3), jmin = 3 * Math.floor(j / 3);
+                for (let ii = imin; ii < imin + 3; ii++) {
+                    for (let jj = jmin; jj < jmin + 3; jj++) {
+                        if ((ii !== i || jj !== j) && mat[ii][jj] > 0 && mat[ii][jj] < 10) {
+                            possib = eliminaDaPossib(possib, mat[ii][jj]);
+                        }
+                    }
+                }
+
+                // Ricostruisce il numero usando la funzione ufficiale
+                let nuovoNum = codifica(possib);
+
+                // --- LOGGING CON LO STATO ---
+                // Controlliamo se la cella è diventata un "singolo" (una sola cifra rimasta)
+                if (nuovoNum > 0 && nuovoNum < 10 && nuovoNum !== mat[i][j]) {
+                    //if (state.singoliChecked) { // Usiamo lo stato!
+                        state.numop++;
+                        memo.value += `${state.numop}- Sola possib.: ${nuovoNum} in riga ${i+1}-col. ${j+1}\n`;
+                        memo.scrollTop = memo.scrollHeight;
+                    //}
+                }
+                mat[i][j] = nuovoNum;
+            }
+        }
+    }
+    scriviMatriceSuGriglia(mat,mat_old,"green");
+}
+//==========================================================================
+function reset() {
+    state.numop = 0;
+    const inputs = document.querySelectorAll('#sudoku-grid input');
+    inputs.forEach(input => {
+        input.value = '';
+        input.style.fontSize = "22px";
+        input.style.color = "black";
+    });
+	
+    document.getElementById('memo1').value = "Griglia azzerata.\n";
+}
+//==========================================================
+
+function risolviTutto() {
+	
+    // 1. Leggiamo lo stato dalle checkbox
+    //aggiornaStatoDallaMaschera();
+    
+	let mat= [] ;
+	let Sum=0;
+	let Sum_old=0;
+    let ProvaKO=0;
+   // Esegue eseguiGiro1 ripetutamente (implementazione base)
+    for (let n=0; n<100 ; n++)  {
+		// 2. Prendiamo la matrice attuale dalla griglia
+		mat = getMatriceDallaGriglia();
+    	Sum_old= sommaMatrice(mat);;
+        ProvaKO=0;
+		for (let n1=0; n1<64 ; n1++) {
+			eseguiGiro();
+			mat = getMatriceDallaGriglia();
+			Sum= sommaMatrice(mat);
+            if (Sum==Sum_old) {
+            	if(n1==0) ProvaKO++;
+            	break;
+            }
+            Sum_old= Sum;
+        }
+        eseguiEliminaNple();
+		mat = getMatriceDallaGriglia();
+		Sum= sommaMatrice(mat);
+		if (Sum==Sum_old) {
+			ProvaKO++;
+		}
+ 
+        if (Sum == 405) break;
+        if (ProvaKO==2) break;
+    }
+
+	//  scriverlo nel  memo1:
+	document.getElementById('memo1').value += `Somma attuale: ${Sum}\n`;
+	return Sum;
+}
+//==========================================================
+
+function Passo() {
+	
+    // 1. Leggiamo lo stato dalle checkbox
+    //aggiornaStatoDallaMaschera();
+    
+	let mat= [] ;
+	let Sum=0;
+	let Sum_old=0;
+   
+	// 2. Prendiamo la matrice attuale dalla griglia
+	mat = getMatriceDallaGriglia();
+	Sum_old= sommaMatrice(mat);
+	
+	// 2. SALVA lo stato PRIMA di modificarlo
+    salvaStatoAttuale(mat);	
+	//ProvaKO=0;
+	//for (let n1=0; n1<64 ; n1++) {
+	eseguiGiro();
+	mat = getMatriceDallaGriglia();
+	Sum= sommaMatrice(mat);
+	if (Sum==Sum_old) {
+		eseguiEliminaNple();
+		mat = getMatriceDallaGriglia();
+		Sum= sommaMatrice(mat);
+	}
+
+	//  scriverlo nel  memo1:
+	//document.getElementById('memo1').value += `Somma attuale: ${Sum}\n`;
+}
+
+//=====================================================
+/**
+ * Genera l'oggetto di stato iniziale per il Sudoku
+ * con tutte le funzionalità di controllo attivate.
+ */
+function inizializzaStatoSudoku() {
+    return {
+        // Selezione Dominio
+        righeChecked: true,
+        colonneChecked: true,
+        quadriChecked: true,
+
+        // Tecniche di Ricerca
+        singoliChecked: true,
+        biunicitaChecked: true,
+        doppiniChecked: true,
+        tripliniChecked: true,
+        checkIntersChecked: true, // Corrisponde a IntersLineeQuadri
+
+        // Opzioni di Visualizzazione e Log
+        OKprint: true,     // Abilita i messaggi in console
+        numop: 0,          // Contatore operazioni (parte da 1)
+        messaggio: "",     // Buffer per i messaggi (come in C++)
+        
+        // Eventuali altri parametri della maschera
+        autoStep: false    // Esempio: se vuoi procedere un passo alla volta
+    };
+}
+/*
+let state = {
+    numop: 0,
+    OKprint: true
+};
+*/
+
+//===============================
+function aggiornaStatoDallaMaschera() {
+    const ids = [
+        'righeChecked', 'colonneChecked', 'quadriChecked',
+        'singoliChecked', 'biunicitaChecked', 'doppiniChecked', 
+        'tripliniChecked', 'checkIntersChecked'
+    ];
+	
+	//inizializzaClickCelle();
+	pulisciEvidenziature();
+	
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            state[id] = el.checked; // Legge solo se l'elemento esiste davvero
+        } else {
+ // QUESTO TI DICE COSA MANCA
+            console.error("ERRORE CRITICO: Manca l'elemento HTML con ID: " + id);
+            state[id] = false;           
+			//console.warn(`Attenzione: elemento con ID "${id}" non trovato nell'HTML!`);
+            //state[id] = false; // Valore di default se l'ID manca
+        }
+    });
+}
+//----------------------
+
+// Questa è la funzione chiamata dal BOTTONE HTML eseguiEliminaNple
+function eseguiEliminaNple() {
+    // 1. Leggiamo lo stato dalle checkbox
+    aggiornaStatoDallaMaschera();
+    
+    // 2. Prendiamo la matrice attuale dalla griglia
+    let mat = getMatriceDallaGriglia();
+	let mat_old;
+	// Copia il CONTENUTO
+	mat_old = structuredClone(mat);
+    
+    // 3. Resettiamo i log e il contatore per questa sessione
+//    state.numop = 1; 
+//    document.getElementById('memo1').value = "--- Inizio Elaborazione N-ple ---\n";
+    
+    // 4. Lanciamo la logica complessa
+    // Passiamo 'state' che ora contiene righeChecked, singoliChecked, ecc.
+    elaborazioneNpleCore(mat, state);
+    
+    // 5. Aggiorniamo la grafica
+    scriviMatriceSuGriglia(mat,mat_old,"red");
+}
+
+// Rinominiamo la tua funzione logica per chiarezza
+function elaborazioneNpleCore(mat, sudokuState) {
+    const quad = [
+        [0, 3, 0, 3], [0, 3, 3, 6], [0, 3, 6, 9],
+        [3, 6, 0, 3], [3, 6, 3, 6], [3, 6, 6, 9],
+        [6, 9, 0, 3], [6, 9, 3, 6], [6, 9, 6, 9]
+    ];
+
+    if (sudokuState.righeChecked) {
+        for (let i = 0; i < 9; i++) {
+            cercaNplette(i, i + 1, 0, 9, mat, 10, sudokuState);
+            intersLineeQuadri(i, i + 1, 0, 9, mat, 10, sudokuState);
+        }
+    }
+
+    if (sudokuState.colonneChecked) {
+        for (let j = 0; j < 9; j++) {
+            cercaNplette(0, 9, j, j + 1, mat, 11, sudokuState);
+            intersLineeQuadri(0, 9, j, j + 1, mat, 11, sudokuState);
+        }
+    }
+
+    if (sudokuState.quadriChecked) {
+        for (let n = 0; n < 9; n++) {
+            cercaNplette(quad[n][0], quad[n][1], quad[n][2], quad[n][3], mat, n, sudokuState);
+            intersLineeQuadri(quad[n][0], quad[n][1], quad[n][2], quad[n][3], mat, n, sudokuState);
+        }
+    }
+}
+
+
+
+//===========================
+//=========================================================
+function cercaNplette(imi, ima, jmi, jma, mat, flag, state) {
+    let posGrup = Array.from({ length: 9 }, () => Array(9).fill(0));
+    let sum = Array(9).fill(0);
+    let sumCol = Array(9).fill(0);
+    let nn = 0;
+	
+let numeroCelle = (ima - imi) * (jma - jmi);
+//console.log("Celle totali nel gruppo:", numeroCelle);	
+
+    // 1. Codifica le possibilità del gruppo
+	for (let i=imi; i<ima ;i++)  {
+	    for (let j=jmi; j<jma ;j++)  {
+	     	//num= mat[i][j];
+            let possib = decodifica(mat[i][j]); // Restituisce array [cifre...]
+        	
+			for (let n=0;possib[n]!=0;n++){
+            	let jj=  possib[n]-1;
+				posGrup[jj][nn]= 1;
+                sum[jj]++;
+                sumCol[nn]++;
+			}
+            nn++;
+        }
+    }
+
+
+
+    // Helper per i messaggi (sostituisce Memo1 e strcpy/strcat)
+    const logMsg = (tipo, info) => {
+        if (!state.OKprint) return;
+        let ambito = flag === 10 ? `RIGA ${imi + 1}` : flag === 11 ? `COLONNA ${jmi + 1}` : `QUADRO ${flag + 1}`;
+        //console.log(`--- ${ambito} ---`);
+        //console.log(`${state.numop++} - ${tipo} -> ${info}`);
+		
+		//let ambito = flag === 10 ? `RIGA ${imi + 1}` : flag === 11 ? `COLONNA ${jmi + 1}` : `QUADRO ${flag + 1}`;
+
+		// Accediamo all'elemento memo1
+		let memo = document.getElementById('memo1');
+
+		// Usiamo += e i backtick `
+		memo.value += `--- ${ambito} ---\n`;
+		memo.value += `${state.numop++} - ${tipo} -> ${info}\n`;
+    };
+
+    // 2. UNICITA'
+    if (state.singoliChecked) {
+		print=false;
+		for (let i = 0; i < 9; i++) {
+            if (sum[i] === 1) {
+                for (let j = 0; j < 9; j++) {
+                    if (posGrup[i][j] === 1) {
+						print=true;
+                        for (let ii = 0; ii < 9; ii++) {
+                            if (ii !== i && posGrup[ii][j] === 1) {
+                                posGrup[ii][j] = 0;
+                                if(print){
+									logMsg("Unicità: ", `Cifra ${i + 1} in pos ${j + 1}`);
+									print=false;
+								}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+
+    // 3. BI-UNICITÀ (Naked Pairs in row/col/box context)
+    if (state.biunicitaChecked) {
+     	//print=false;
+        let vet_i = [], vet_j = [], vet_jj = [];
+        for (let i = 0; i < 9; i++) {
+            if (sum[i] === 2) {
+                let positions = [];
+                for (let j = 0; j < 9; j++) if (posGrup[i][j] === 1) positions.push(j);
+                vet_i.push(i);
+                vet_j.push(positions[0]);
+                vet_jj.push(positions[1]);
+            }
+        }
+        for (let n = 0; n < vet_i.length; n++) {
+            for (let m = n + 1; m < vet_i.length; m++) {
+                if (vet_j[n] === vet_j[m] && vet_jj[n] === vet_jj[m]) {
+					//azzera le colonne j1 e jj1 di PosGrup
+                    for (let i = 0; i < 9; i++) {
+                        if (i !== vet_i[n] && i !== vet_i[m]) {
+                            if (posGrup[i][vet_j[n]] || posGrup[i][vet_jj[n]]) {
+								// DEVE STAMPARE
+                                logMsg("BI-unicità", `Cifre ${vet_i[n]+1}${vet_i[m]+1} in pos ${vet_j[n]+1}${vet_jj[n]+1}`);
+                            }
+							//azzera le colonne j1 e jj1 di PosGrup
+							posGrup[i][vet_j[n]] = 0;
+							posGrup[i][vet_jj[n]] = 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+	// 4.  DOPPINI
+	// Nota: Assumo che SudokuDoppini e SudokuTriplini siano gli ID delle  checkbox HTML
+	//if (document.getElementById('SudokuDoppini').checked) {
+	if (state.doppiniChecked) {
+		let print = false;
+		let vet_j = new Array(4);
+		let vet_i = new Array(9);
+
+		for (let j = 0; j < 8; j++) {
+			if (sumCol[j] == 2) {
+				for (let jj = j + 1; jj < 9; jj++) {
+					if (sumCol[jj] == 2) {
+						vet_j[0] = j;
+						vet_j[1] = jj;
+						vet_j[2] = 10;
+
+						if (NumCifre(vet_j, vet_i, posGrup) == 2) {
+							print = true;
+							for (let jjj = 0; jjj < 9; jjj++) {
+								if (jjj != j && jjj != jj) {
+									if (posGrup[vet_i[0]][jjj] == 1 || posGrup[vet_i[1]][jjj] == 1) {
+										posGrup[vet_i[0]][jjj] = 0;
+										posGrup[vet_i[1]][jjj] = 0;
+										if(print)  {
+											// Utilizzo dei dati corretti per il log
+											logMsg("Doppino: ", `Cifre ${vet_i[0] + 1}-${vet_i[1] + 1} in pos ${j + 1}-${jj + 1}`);
+											print= false;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+    // 5. TRIPLINI
+	//if (document.getElementById('SudokuTriplini').checked) {
+	if (state.tripliniChecked) {
+		let print = false;
+		let vet_j = new Array(4);
+		let vet_i = new Array(9);
+
+		for (let j = 0; j < 7; j++) {
+			if (sumCol[j] > 1 && sumCol[j] < 4) {
+				for (let jj = j + 1; jj < 8; jj++) {
+					if (sumCol[jj] > 1 && sumCol[jj] < 4) {
+						for (let jjj = jj + 1; jjj < 9; jjj++) {
+							if (sumCol[jjj] > 1 && sumCol[jjj] < 4) {
+								vet_j[0] = j;
+								vet_j[1] = jj;
+								vet_j[2] = jjj;
+								vet_j[3] = 10;
+
+								if (NumCifre(vet_j, vet_i, posGrup) == 3) {
+									print = true;
+									for (let nn = 0; nn < 9; nn++) {
+										if (nn != j && nn != jj && nn != jjj) {
+											if (posGrup[vet_i[0]][nn] == 1 || posGrup[vet_i[1]][nn] == 1 || posGrup[vet_i[2]][nn] == 1) {
+												posGrup[vet_i[0]][nn] = 0;
+												posGrup[vet_i[1]][nn] = 0;
+												posGrup[vet_i[2]][nn] = 0;
+												if(print)  {
+													// Messaggio per i Triplini
+													logMsg("Triplino", `Cifre ${vet_i[0] + 1}-${vet_i[1] + 1}-${vet_i[2] + 1} in pos ${j + 1}-${jj + 1}-${jjj + 1}`);
+													print= false;
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+    // 6. RICODIFICA FINALE
+    nn = 0;
+    for (let i = imi; i < ima; i++) {
+        for (let j = jmi; j < jma; j++) {
+            let nuovePossib = [];
+            for (let jj = 0; jj < 9; jj++) {
+                if (posGrup[jj][nn] === 1) nuovePossib.push(jj + 1);
+            }
+            mat[i][j] = codifica(nuovePossib);
+            nn++;
+        }
+    }
+}
+
+//==============================
+/**
+ * Traduzione JS di IntersLineeQuadri
+ * Gestisce le intersezioni tra Righe/Colonne e Quadrati (Pointing pairs/Box-Line reduction)
+ */
+function intersLineeQuadri(imi, ima, jmi, jma, mat, flag) {
+    let print = false;
+    let OKinters = false;
+    let riga = false;
+    let n, nn, nn1, i, ii, j, jj, jjj;
+    let cifra, flagQ, iq, jq;
+    
+    // Inizializzazione strutture dati
+    let PosGrup = Array.from({ length: 9 }, () => Array(9).fill(0));
+    let Sum = new Array(9).fill(0);
+    let SumCol = new Array(9).fill(0);
+    let possib = new Array(10);
+    let vet_i = new Array(10);
+    let vet_j = new Array(10).fill(10);
+    let imi2, ima2, jmi2, jma2;
+	
+    const logMsg = (tipo, info) => {
+        if (!state.OKprint) return;
+        let ambito = flag === 10 ? `## RIGA ${imi + 1}` : flag === 11 ? `## COLONNA ${jmi + 1}` : `## QUADRO ${flag + 1}`;
+        //console.log(`--- ${ambito} ---`);
+        //console.log(`${state.numop++} - ${tipo} -> ${info}`);
+		
+		// Accediamo all'elemento memo1
+		let memo = document.getElementById('memo1');
+
+		// Usiamo += e i backtick `
+		memo.value += `--- ${ambito} ---\n`;
+		memo.value += `${state.numop++} - ${tipo} -> ${info}\n`;
+    };
+
+
+    // Controllo se la checkbox è attiva
+    if (!state.checkIntersChecked) return;
+
+    // 1. Codifica le possibilità del gruppo corrente in PosGrup
+    nn = 0;
+    for (i = imi; i < ima; i++) {
+        for (j = jmi; j < jma; j++) {
+            let num = mat[i][j];
+            // Assumo che Decodifica e Codifica siano disponibili globalmente
+            let possib = decodifica(num); 
+            for (n = 0; possib[n]!=0; n++) {
+                jj = possib[n] - 1;
+                PosGrup[jj][nn] = 1;
+                Sum[jj]++;
+                SumCol[nn]++;
+            }
+            nn++;
+        }
+    }
+
+    // 2. Controlla se le presenze (2 o 3) sono confinate in un sottogruppo
+    for (i = 0; i < 9; i++) {
+        if (Sum[i] === 2 || Sum[i] === 3) {
+            cifra = i; 
+            vet_j.fill(10);
+            jj = 0;
+            for (j = 0; j < 9; j++) {
+                if (PosGrup[i][j] === 1) {
+                    vet_j[jj] = j;
+                    jj++;
+                }
+            }
+
+            // Calcolo distanze
+            if (Sum[i] === 2) { nn = vet_j[1] - vet_j[0]; nn1 = 0; }
+            if (Sum[i] === 3) { nn = vet_j[2] - vet_j[0]; nn1 = vet_j[1] - vet_j[0]; }
+
+            // Logica di intersezione
+            if ((nn === 1 && vet_j[0] % 3 < 2) || (nn === 2 && vet_j[0] % 3 === 0)) {
+                OKinters = true;
+                if (flag === 10) { // RIGA
+                    iq = Math.floor(imi / 3);
+                    jq = Math.floor(vet_j[0] / 3);
+                    imi2 = iq * 3; ima2 = imi2 + 3;
+                    jmi2 = jq * 3; jma2 = jmi2 + 3;
+                    vet_i[0] = (imi % 3) * 3;
+                    vet_i[1] = vet_i[0] + 1;
+                    vet_i[2] = vet_i[1] + 1;
+                    flagQ = iq * 3 + jq + 1;
+                    break;
+                } else if (flag === 11) { // COLONNA
+                    iq = Math.floor(vet_j[0] / 3);
+                    jq = Math.floor(jmi / 3);
+                    imi2 = iq * 3; ima2 = imi2 + 3;
+                    jmi2 = jq * 3; jma2 = jmi2 + 3;
+                    vet_i[0] = jmi % 3;
+                    vet_i[1] = vet_i[0] + 3;
+                    vet_i[2] = vet_i[1] + 3;
+                    flagQ = iq * 3 + jq + 1;
+                    break;
+                } else { // QUADRO attraversa riga
+                    riga = true;
+                    iq = Math.floor(vet_j[0] / 3);
+                    imi2 = imi + iq; ima2 = imi2 + 1;
+                    jmi2 = 0; jma2 = 9;
+                    vet_i[0] = jmi;
+                    vet_i[1] = jmi + 1;
+                    vet_i[2] = jmi + 2;
+                    break;
+                }
+            } else if ((nn === 3 && nn1 === 0) || (nn === 6 && nn1 === 3)) {
+                if (flag < 10) { // QUADRO attraversa colonna
+                    OKinters = true;
+                    riga = false;
+                    jq = vet_j[0] % 3;
+                    jmi2 = jmi + jq; jma2 = jmi2 + 1;
+                    imi2 = 0; ima2 = 9;
+                    vet_i[0] = imi;
+                    vet_i[1] = imi + 1;
+                    vet_i[2] = imi + 2;
+                    break;
+                }
+            }
+        }
+    }
+
+
+    // 3. Applica le modifiche nel secondo dominio
+    if (OKinters) {
+        // Reset e ricarica dati per il secondo dominio (imi2, ima2, jmi2, jma2)
+        PosGrup = Array.from({ length: 9 }, () => Array(9).fill(0));
+		Sum =  Array(9).fill(0);
+		SumCol =  Array(9).fill(0);
+        nn = 0;
+        for (i = imi2; i < ima2; i++) {
+            for (j = jmi2; j < jma2; j++) {
+                let possib = decodifica(mat[i][j]);
+ 
+				for ( n=0;possib[n]!=0;n++){
+					jj=  possib[n]-1;
+					PosGrup[jj][nn]= 1;
+					Sum[jj]= Sum[jj]+1;
+					SumCol[nn]= SumCol[nn]+1;
+				}
+                nn++;
+            }
+        }
+
+        // Elimina la cifra dove non consentita
+        print = false;
+        let n_idx = 0;
+        for (j = 0; j < 9; j++) {
+            if (j === vet_i[n_idx]) {
+                n_idx++;
+            } else {
+                if (PosGrup[cifra][j] !== 0) {
+                    print = true;
+                    PosGrup[cifra][j] = 0;
+                }
+            }
+        }
+
+        if (print) {
+            // Generazione log usando la logMsg JavaScript
+            let infoIncompat = `${cifra + 1}`;
+            if (flag > 9) {
+                infoIncompat += ` in quadro ${flagQ}`;
+            } else {
+                infoIncompat += riga ? ` in riga ${imi2 + 1}` : ` in col. ${jmi2 + 1}`;
+            }
+            
+            logMsg("Incompatib.", infoIncompat);
+
+            // 4. Ricodifica le celle
+            nn = 0;
+            for (i = imi2; i < ima2; i++) {
+                for (j = jmi2; j < jma2; j++) {
+                    let nuovePossib = [];
+                    for (jj = 0; jj < 9; jj++) {
+                        if (PosGrup[jj][nn] === 1) nuovePossib.push(jj + 1);
+                    }
+                    mat[i][j] = codifica(nuovePossib);
+                    nn++;
+                }
+            }
+        }
+    }
+}
+//==============================
+function Ambiguita() {
+// 1. Cattura l'elemento che ha il focus   && cellaAttiva.tagName === "INPUT" && cellaAttiva.value !== ""
+/*
+    let cellaAttiva = document.activeElement;
+    let cifraSelezionata = null;
+
+    // 2. Controlla se l'elemento è effettivamente un input della nostra griglia
+    if (cellaAttiva ) {
+        cifraSelezionata = parseInt(cellaAttiva.value);
+        console.log("Stai cercando ambiguità per la cifra:", cifraSelezionata);
+    }
+	*/
+	let cifraSelezionata = document.getElementById('cifraSel').value-1;	
+    const logMsg = (tipo, info) => {
+        //if (!state.OKprint) return;
+ 		
+		// Accediamo all'elemento memo1
+		let memo = document.getElementById('memo1');
+
+		// Usiamo += e i backtick `
+		//memo.value += `--- ${ambito} ---\n`;
+		memo.value += `${tipo}  ${info}\n`;
+    };
+	
+	
+	const quad = [
+        [0, 3, 0, 3], [0, 3, 3, 6], [0, 3, 6, 9],
+        [3, 6, 0, 3], [3, 6, 3, 6], [3, 6, 6, 9],
+        [6, 9, 0, 3], [6, 9, 3, 6], [6, 9, 6, 9]
+    ];	
+	aggiornaStatoDallaMaschera(); // Carica tutto in 'state'
+    
+    let mat = getMatriceDallaGriglia();
+    //let memo = document.getElementById("memo1");
+	
+	
+
+    // In JS, 'mat' deve essere già popolata. 
+    // Se 'leggi' serve a leggere dalla UI, va implementata a parte.
+    
+    for (let icifra = 0; icifra < 9; icifra++) {
+        let rigaMessaggio = `CIFRA - ${icifra + 1}\n`;
+        logMsg("==Ambiguità: ",rigaMessaggio); 
+
+        // Ricerca sulle RIGHE
+        if (state.righeChecked) {
+            for (let i = 0; i < 9; i++) {
+                cercaAmbiguita(i, i + 1, 0, 9, mat, 10, icifra, cifraSelezionata);
+            }
+        }
+
+        // Ricerca sulle COLONNE
+        if (state.colonneChecked) {
+            for (let j = 0; j < 9; j++) {
+                cercaAmbiguita(0, 9, j, j + 1, mat, 11, icifra, cifraSelezionata);
+            }
+        }
+
+        // Ricerca sui QUADRATI
+        if (state.quadriChecked) {
+            for (let n = 0; n < 9; n++) {
+                let imi = quad[n][0];
+                let ima = quad[n][1];
+                let jmi = quad[n][2];
+                let jma = quad[n][3];
+                cercaAmbiguita(imi, ima, jmi, jma, mat, n, icifra, cifraSelezionata);
+            }
+        }
+    }
+}
+
+//==============================
+function cercaAmbiguita(imi, ima, jmi, jma, mat, flag, cifra, cifraSel) {
+    //let okAmbiguita = false;
+	
+    const logMsg = (tipo, info) => {
+        //if (!state.OKprint) return;
+ 		
+		// Accediamo all'elemento memo1
+		let memo = document.getElementById('memo1');
+
+		// Usiamo += e i backtick `
+		//memo.value += `--- ${ambito} ---\n`;
+		memo.value += ` ${tipo}   ${info}\n`;
+    };
+  
+    
+    // Inizializzazione strutture dati
+    // PosGrup[9][9], Sum[9], SumCol[9]
+    let posGrup = Array.from({ length: 9 }, () => Array(9).fill(0));
+    let sum = Array(9).fill(0);
+    let sumCol = Array(9).fill(0);
+    let vet_j = Array(10).fill(10);
+
+    let nn = 0;
+    for (let i = imi; i < ima; i++) {
+        for (let j = jmi; j < jma; j++) {
+            let num = mat[i][j]; 
+            
+            // Decodifica deve restituire un array di numeri (es. [1, 5, 9])
+            let possib = decodifica(num); 
+            
+            for (let n = 0; possib[n]!==0; n++) {
+                let jj = possib[n] - 1;
+                if (jj >= 0 && jj < 9) {
+                    posGrup[jj][nn] = 1;
+                    sum[jj]++;
+                    sumCol[nn]++;
+                }
+            }
+            nn++;
+        }
+    }
+
+	let accendi= 0;
+	if (sum[cifra] === 2) {
+        // Trovata ambiguità: dobbiamo capire quali erano le coordinate (i, j)
+        let contatoreLocale = 0;
+        for (let i = imi; i < ima; i++) {
+            for (let j = jmi; j < jma; j++) {
+                // Se questa cella contiene la cifra tra le sue possibilità
+                if (posGrup[cifra][contatoreLocale] === 1 && cifra == cifraSel) {
+					if(accendi==0) {
+						if(flag<10 ) {
+							accendi= 1;
+						}else{
+							accendi= 10;
+						}
+					}else{
+						accendi= 1;
+					}
+                }
+				 // EVIDENZIA LA CELLA
+				if(accendi) {
+					evidenziaCella_1(i, j);
+					accendi--;
+				}
+                contatoreLocale++;
+            }
+        }
+
+        // Costruzione stringa messaggio (sostituisce strcpy/strcat/itoa)
+        if (flag === 10) {
+			logMsg("",`        nella RIGA->  ${imi + 1}`);
+        } else if (flag === 11) {
+            logMsg("",`        nella COL.->   ${jmi + 1}`);
+        } else {
+            logMsg("",`        nel   QUAD-> ${flag + 1}`);
+        }
+    }
+
+    //if (okAmbiguita) {
+     //   logMsg(messaggio);
+    //}
+}
+//==============================
+function codifica(possibArray) {
+    let num = 0;
+    // Iteriamo sull'array finché non troviamo uno 0 o finisce l'array
+    for (let i = 0; i < possibArray.length; i++) {
+        if (possibArray[i] === 0) break;
+        num = num * 10 + possibArray[i];
+    }
+    return num;
+}
+function decodifica(num) {
+    // Inizializziamo un array di 10 elementi con 0 (per compatibilità col tuo C++)
+    let possib = new Array(10).fill(0);
+    if (num === 0) return possib;
+
+    let sNum = num.toString();
+    for (let i = 0; i < sNum.length; i++) {
+        possib[i] = parseInt(sNum[i]);
+    }
+    return possib;
+}
+function eliminaDaPossib(possibArray, cifra) {
+    // Filtriamo l'array: teniamo solo i numeri diversi dalla cifra da eliminare
+    // e diversi da zero (per pulizia)
+    let nuovo = possibArray.filter(n => n !== cifra && n !== 0);
+    
+    // Ricostruiamo la struttura a 10 elementi con lo zero finale come nel tuo C++
+    let risultato = new Array(10).fill(0);
+    for (let i = 0; i < nuovo.length; i++) {
+        risultato[i] = nuovo[i];
+    }
+    return risultato;
+}
+function numCifre_old(vet_j, vet_i, posGrup) {
+    let nn = 0;
+    // vet_i deve essere resettato o inizializzato esternamente
+    for (let i = 0; i < 9; i++) {
+        let esiste = false;
+        
+        for (let n = 0; n < 9 && vet_j[n] !== 10; n++) {
+            let colonna = vet_j[n];
+            if (posGrup[i][colonna] === 1) {
+                esiste = true;
+                break; // Trovata, possiamo passare alla prossima riga i
+            }
+        }
+        
+        if (esiste) {
+            vet_i[nn] = i;
+            nn++;
+        }
+    }
+    return nn;
+}
+
+// Funzione NumCifre tradotta in JS
+const NumCifre = (vet_j, vet_i, PosGrup) => {
+    let nn = 0;
+    for (let i = 0; i < 9; i++) {
+        let esiste = false;
+        for (let n = 0; n < 9 && vet_j[n] !== 10; n++) {
+            esiste = esiste || PosGrup[i][vet_j[n]];
+        }
+        if (esiste) {
+            vet_i[nn] = i;
+            nn++;
+        }
+    }
+    return nn;
+};
+
+//  SOMMA DEGLI ELEMENTI DELLA MATRICE
+function sommaMatrice(mat) {
+    let somma = 0;
+    for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+            // Aggiungiamo il valore assicurandoci che sia un numero
+            somma += Number(mat[i][j]) || 0;
+        }
+    }
+    return somma;
+}
+
+//  CONTA GLI ELEMENTI DELLA MATRICE
+function sommaCifre(mat) {
+    let somma = 0;
+    for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+            // Aggiungiamo il valore assicurandoci che sia un numero
+            somma += (mat[i][j]!=0);
+        }
+    }
+    return somma;
+}
+//=====================================================================
+//   GENERATORE DI Sudoku
+//=====================================================================
+//=====================================================================
+// Variabili di stato (da integrare nel tuo oggetto o globali)
+//let simmetria = 0;
+//let okPrint = true;
+
+/**
+ * Funzione ausiliaria per copiare le matrici (come i cicli for in C++)
+ */
+function copiaMatrice(da, a) {
+    for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+            a[i][j] = da[i][j];
+        }
+    }
+}
+
+/**
+ * TOGLI 1: Rimuove numeri casualmente mantenendo la risolvibilità
+ */
+function togli1() {
+
+	let mat_0 = Array(9).fill().map(() => Array(9).fill(0));
+    let mat = getMatriceDallaGriglia();
+	let val_1;
+	let val_2;
+    //okPrint = false;
+	let n = 0;
+    const maxTentativi = 300;
+    const maxSommaUguale = 8;
+	let somma_old= 0;
+	let numSommaUguale= 0;
+	let n_fine= 0;
+	
+	if(mat[0][0]==123456789)  {
+		document.getElementById('memo1').value = `Inserire almeno un numero nello schema`;
+		//console.log("Ho finito il lavoro!");			
+		//scriviMatriceSuGriglia(mat,mat,"black");
+		state.numop=0;
+		return; 	
+	}
+	
+	// Funzione interna che esegue un singolo step
+    function eseguiStep() {
+        if (n >= maxTentativi) {
+            // Fine del ciclo
+            //updateProgressBar(0);
+			let numCifre= sommaCifre(mat);
+			document.getElementById('memo1').value += `Lavoro Finito al Passo : ${n_fine}\n`;	
+			document.getElementById('memo1').value += `Lavoro finito (${numCifre} cifre)\n`;
+			//console.log("Ho finito il lavoro!");			
+			scriviMatriceSuGriglia(mat,mat,"black");
+			state.numop=0;
+            return; 
+        } 
+    //for (let n = 0; n < 100; n++) {
+        // Aggiorna eventuale ProgressBar (se hai un elemento HTML)
+        //updateProgressBar(n); 
+
+        let i = Math.floor(Math.random() * 9);
+        let j = Math.floor(Math.random() * 9);
+
+        if (mat[i][j] === 0) {
+			n++;
+			eseguiStep();
+		}
+        // Rimuovi il numero
+		val_1= mat[i][j] ;
+        mat[i][j] = 0;
+        val_2= applicaSimmetria(i, j, 0, mat);
+        // Visualizza i cambiamenti
+		scriviMatriceSuGriglia(mat,mat,"green");
+        let somma= risolviTutto(); // Simula la risoluzione automatica
+		scriviMatriceSuGriglia(mat,mat_0,"red");
+
+        // Verifica se il Sudoku è ancora risolvibile univocamente 
+        if (somma !== 405) {
+			// Ripristina mat per il prossimo tentativo
+			mat[i][j] = val_1;
+            applicaSimmetria(i, j, val_2, mat);
+			
+		}else{
+			somma= sommaMatrice(mat);
+			if (somma==somma_old)  {
+				numSommaUguale++;
+				document.getElementById('memo1').value = `Matrice immutata per ${numSommaUguale} volte\n`;	
+				if(numSommaUguale >= maxSommaUguale ) {
+					state.numop=0;
+					n_fine= n;
+					n= maxTentativi;
+					return;
+				}
+			}else{
+				somma_old= somma;
+				numSommaUguale= 0;
+			}
+		}
+		n++;
+		document.getElementById('memo1').value = `Passo attuale: ${n}\n`;
+        // Richiama se stessa dopo 10ms per il prossimo step
+        // Questo "pausa" permette al browser di aggiornare la griglia
+        setTimeout(eseguiStep, 10);		
+    }
+	eseguiStep();
+    //updateProgressBar(0);
+}
+//=======================================================================
+async function togli2() {
+    // ... (le tue variabili iniziali restano uguali) ...
+	let mat_0 = Array(9).fill().map(() => Array(9).fill(0));
+    let mat = getMatriceDallaGriglia();
+	let val_1;
+	let val_2;
+    //okPrint = false;
+	let n = 0;
+    const maxTentativi = 300;
+    const maxSommaUguale = 8;
+	let somma_old= 0;
+	let numSommaUguale= 0;
+
+
+
+    // Definiamo una funzione di pausa interna
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    if(mat[0][0] == 123456789) {
+        document.getElementById('memo1').value = `Inserire almeno un numero`;
+        return;
+    }
+
+    // Trasformiamo il ciclo in un loop standard ma asincrono
+    while (n < maxTentativi) {
+        let i = Math.floor(Math.random() * 9);
+        let j = Math.floor(Math.random() * 9);
+
+        if (mat[i][j] === 0) {
+            n++;
+            continue; // Salta il resto e ricomincia il ciclo while
+        }
+
+        // --- Logica di rimozione ---
+        val_1 = mat[i][j];
+        mat[i][j] = 0;
+        val_2 = applicaSimmetria(i, j, 0, mat);
+        
+        scriviMatriceSuGriglia(mat, mat, "green");
+        let somma = risolviTutto(); 
+        scriviMatriceSuGriglia(mat, mat_0, "red");
+
+        if (somma !== 405) {
+            mat[i][j] = val_1;
+            applicaSimmetria(i, j, val_2, mat);
+        } else {
+            let sommaAttuale = sommaMatrice(mat);
+            if (sommaAttuale == somma_old) {
+                numSommaUguale++;
+                if(numSommaUguale >= maxSommaUguale) break; // Esci dal ciclo
+            } else {
+                somma_old = sommaAttuale;
+                numSommaUguale = 0;
+            }
+        }
+
+        n++;
+        document.getElementById('memo1').value = `Passo attuale: ${n}\n`;
+
+        // PAUSA: Permette al browser di respirare e aggiornare la grafica
+        await sleep(10); 
+    }
+
+    // Questo codice viene eseguito SOLO UNA VOLTA alla fine del ciclo
+    let numCifre = sommaCifre(mat);
+    document.getElementById('memo1').value += `Lavoro Finito al Passo : ${n}\n`;    
+    document.getElementById('memo1').value += `Lavoro finito (${numCifre} cifre)\n`;
+    scriviMatriceSuGriglia(mat, mat, "black");
+    state.numop = 0;
+}
+/**
+ * RIEMPI 1: Inserisce il numero con meno possibilità (euristica)
+ */
+function riempi1() {
+    //okPrint = false;
+    eseguiGiro(); // Logica per calcolare le possibilità per cella
+
+    for (let n = 0; n < 100; n++) {
+        //updateProgressBar(n);
+		let mat = getMatriceDallaGriglia();
+        let minCel = 123456789;
+        let imi = -1, jmi = -1;
+
+        for (let i = 0; i < 9; i++) {
+            for (let j = 0; j < 9; j++) {
+                // In C++ mat[i][j] > 9 indica che la cella contiene le "note" (possibilità)
+                if (mat[i][j] > 9) {
+                    if (mat[i][j] < minCel) {
+                        minCel = mat[i][j];
+                        imi = i;
+                        jmi = j;
+                    }
+                }
+            }
+        }
+
+        if (minCel === 123456789) break;
+
+        // Prende l'ultima cifra delle possibilità e la assegna
+        mat[imi][jmi] = minCel % 10;
+		scriviMatriceSuGriglia(mat,mat,"black");
+		let somma= risolviTutto();    
+        if (somma === 405) break;
+    }
+
+    //okPrint = true;
+	//scriviMatriceSuGriglia(mat,mat,"black");  
+	//updateProgressBar(0);
+}
+
+/**
+ * Gestione delle simmetrie
+ */
+function applicaSimmetria(i, j, valore, mat) {
+	let val_prima= 0;
+	let simmetria = 3;
+    if (simmetria === 1) mat[j][i] = valore;           // Diagonale
+    if (simmetria === 2) mat[i][8 - j] = valore;       // Specchio Orizzontale
+    if (simmetria === 3) {
+		val_prima= mat[8 - i][8 - j];
+		mat[8 - i][8 - j] = valore;   // Rotazionale
+	}
+	return val_prima;
+}
+
+
+function generaSudoku() {
+	riempi1();
+	togli2();
+	
+}
+//=============================================
+function togliTutto_old() {
+	let mat_0 = Array(9).fill().map(() => Array(9).fill(0));
+    let mat = getMatriceDallaGriglia();
+	let val_1;
+	//const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+	
+	//scriviMatriceSuGriglia(mat,mat_0,"red");
+        // Aggiorna eventuale ProgressBar (se hai un elemento HTML)
+        //updateProgressBar(n); 
+
+	for(let i=0;i<9;i++)  {
+		for(let j=0;j<9;j++)  {
+		    if (mat[i][j] === 0) {
+				continue;
+			}
+			// Rimuovi il numero
+			val_1= mat[i][j] ;
+			mat[i][j] = 0;
+			scriviMatriceSuGriglia(mat,mat_0,"red");
+			// Pausa di 10 ms
+		
+			// Visualizza i cambiamenti
+			let somma= risolviTutto(); // Simula la risoluzione automatica
+
+			// Verifica se il Sudoku è ancora risolvibile univocamente 
+			if (somma !== 405) {
+				// Ripristina mat per il prossimo tentativo
+				mat[i][j] = val_1;					
+				scriviMatriceSuGriglia(mat,mat_0,"red");
+			}	
+		}		
+	}
+	state.numop=0;
+	let numCifre= sommaCifre(mat);
+	document.getElementById('memo1').value = `Lavoro finito (${numCifre} cifre)\n`;
+	//console.log("Ho finito il lavoro!");			
+	scriviMatriceSuGriglia(mat,mat_0,"red");
+}
+//====================================
+async function togliTutto() { // 1. Aggiunto async
+    let mat_0 = Array(9).fill().map(() => Array(9).fill(0));
+    let mat = getMatriceDallaGriglia();
+    let val_1;
+    
+    // Definizione locale della funzione di pausa
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+            if (mat[i][j] === 0) {
+                continue;
+            }
+
+            // --- FASE 1: Tentativo di rimozione ---
+            val_1 = mat[i][j];
+            mat[i][j] = 0;
+
+            // Aggiorna la griglia visivamente (colore rosso per il tentativo)
+            scriviMatriceSuGriglia(mat, mat_0, "red");
+            
+            // 2. PAUSA: Senza questa, il browser non mostrerebbe mai il rosso
+            await sleep(10); 
+
+            // --- FASE 2: Verifica risolvibilità ---
+            let somma = risolviTutto(); 
+
+            // Se il Sudoku non è più risolvibile univocamente
+            if (somma !== 405) {
+                // Ripristina il valore originale
+                mat[i][j] = val_1;
+                scriviMatriceSuGriglia(mat, mat_0, "black"); // Torna nero se ripristinato
+                
+                // Opzionale: un'altra piccola pausa per vedere il ripristino
+                // await sleep(5); 
+            }
+        }
+    }
+
+    // --- FASE FINALE ---
+    state.numop = 0;
+    let numCifre = sommaCifre(mat);
+    document.getElementById('memo1').value = `Lavoro finito (${numCifre} cifre)\n`;
+    
+    // Visualizzazione finale pulita
+    scriviMatriceSuGriglia(mat, mat_0, "black");
+}
+
+//=======================================
+function evidenziaCella_1(r, c) {
+    // Esempio: se le tue celle hanno id="f00", "f01"... (riga e colonna)
+    let id = "cell-" + r + "-" + c; 
+    let cella = document.getElementById(id);
+    
+    if (cella) {
+        cella.style.backgroundColor = "yellow";
+    }
+}
+function pulisciEvidenziature() {
+    for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+            let cella = document.getElementById("cell-" + i + "-" + j);
+            if (cella) {
+                cella.style.backgroundColor = ""; // Torna al colore originale
+            }
+        }
+    }
+}
+
+//======================================
+//======================================
+
+// PULIZIA:// PULIZIA: Rimuovi window.onload e la funzione inizializzaClickCelle esterna
+// Tieni solo questo blocco unico:
+
+// Tieni solo questo blocco unico:
+//******************************
+
+function inizializzaClickCelle() {
+    const inputs = document.querySelectorAll('#sudoku-grid input');
+
+    inputs.forEach(input => {
+        input.addEventListener('dblclick', function(e) {
+			e.preventDefault(); 
+			e.stopPropagation(); // Evita che il click risalga alla tabella       
+			// Un solo comando toggle
+            this.classList.toggle('evidenziata');
+            console.log("Giallo attivato/disattivato su:", this.id);
+        });
+    });
+}
+
+// Unico punto di avvio
+document.addEventListener('DOMContentLoaded', () => {
+    inizializzaClickCelle();
+    console.log("Sistema pronto: Doppio Click per Giallo.");
+});
+
+// Questa serve per le tue funzioni automatiche (Ambiguità, ecc.)
+function evidenziaCella(r, c) {
+    let id = `cell-${r}-${c}`;
+    let input = document.getElementById(id);
+    if (input) {
+        input.classList.add('evidenziata');
+    }
+}
+//========================================
+function Esempio() {
+	
+	const mat = [
+        [0, 5, 0,   1, 0, 3,   0, 0, 6], 
+        [9, 7, 0,   5, 0, 0,   0, 2, 0], 
+        [0, 0, 0,   0, 2, 0,   0, 0, 0], 
+		
+        [3, 4, 0,   2, 0, 0,   0, 0, 8], 
+        [0, 0, 8,   0, 3, 0,   7, 0, 0], 
+        [7, 0, 0,   0, 0, 0,   0, 6, 3], 
+		
+        [0, 0, 0,   0, 7, 0,   0, 0, 0], 
+        [0, 8, 0,   0, 0, 0,   0, 4, 5], 
+        [5, 0, 0,   8, 0, 1,   0, 3, 0] 
+    ];	
+    scriviMatriceSuGriglia(mat, mat, "black");
+	document.getElementById('memo1').value = "Griglia azzerata.\n";
+
+}	
+//=========================================
+
+//=========================================
+
+function salvaSuDatabase(nomeSudoku, livello) {
+    let mat = getMatriceDallaGriglia();
+    const stringaSudoku = mat.flat().join('');
+
+    const dati = new FormData();
+    dati.append('nome', nomeSudoku);
+    dati.append('schema', stringaSudoku); // 'schema' deve corrispondere a $_POST['schema'] in PHP
+    dati.append('livello', livello);
+
+    fetch('api_sudoku.php?azione=salva', {
+        method: 'POST',
+        body: dati
+    })
+    .then(res => res.json())
+    .then(data => {
+        if(data.status === "success") {
+            //alert("Sudoku '" + nomeSudoku + "' registrato!");
+            alert("Sudoku '" + nomeSudoku + "' " + data.message);
+            // Opzionale: ricarica la lista nel menu a tendina per vedere subito il nuovo arrivato
+            caricaListaSudoku();
+        } else {
+            alert("Errore: " + data.message);
+        }
+    })
+    .catch(err => console.error("Errore invio:", err));
+}
+//=========================================
+
+function caricaListaSudoku() {
+    fetch('api_sudoku.php?azione=lista')
+        .then(res => res.json())
+        .then(data => {
+            const select = document.getElementById('menu-sudoku');
+            select.innerHTML = '<option>Scegli un Sudoku...</option>';
+            data.forEach(s => {
+                select.innerHTML += `<option value="${s.id}">${s.nome} (${s.livello})</option>`;
+            });
+        });
+}
+//=========================================
+
+document.getElementById('menu-sudoku').addEventListener('change', function() {
+    const idScelto = this.value;
+    if (!idScelto) return; // Se sceglie l'opzione vuota, non fare nulla
+
+    fetch(`api_sudoku.php?azione=carica&id=${idScelto}`)
+        .then(res => res.json())
+        .then(sudoku => {
+            console.log("Dati caricati:", sudoku.schema_iniziale);
+            
+            let stringaDalDB = sudoku.schema_iniziale;
+            let matrice = [];
+
+            for (let i = 0; i < 9; i++) {
+                // In JS si usa .substring(inizio, fine)
+                let rigaDati = stringaDalDB.substring(i * 9, (i * 9) + 9);
+                
+                // In JS .split('') trasforma la stringa in array di caratteri
+                // .map(Number) trasforma i caratteri in numeri veri
+                matrice[i] = rigaDati.split('').map(Number);
+            }
+
+            // Richiamo la tua funzione per disegnare
+            scriviMatriceSuGriglia(matrice, matrice, "black");
+        })
+        .catch(err => console.error("Errore nel caricamento:", err));
+});
+//=========================================
+function preparaSalvataggio() {
+    // 1. Prendo i valori inseriti dall'utente
+    const nome = document.getElementById('input-nome').value;
+    const livello = document.getElementById('select-livello').value;
+
+    // 2. Controllo che il nome non sia vuoto
+    if (nome.trim() === "") {
+        alert("Per favore, inserisci un nome per il Sudoku!");
+        return;
+    }
+
+    // 3. Chiamo la tua funzione di salvataggio passando i dati reali
+    // Assicurati che 'salvaSuDatabase' sia quella che usa FormData
+    salvaSuDatabase(nome, livello);
+}
+//=========================================
+function salvaStatoAttuale(mat) {
+    // Salviamo una copia profonda della matrice
+    // Limitiamo la cronologia a 10 passaggi per non occupare troppa memoria
+    if (cronologiaStati.length > 10) {
+        cronologiaStati.shift(); // Rimuove il più vecchio
+    }
+    cronologiaStati.push(structuredClone(mat));
+}
+
+function comandoIndietro() {
+    if (cronologiaStati.length > 0) {
+        // Prendi l'ultimo stato salvato (e rimuovilo dalla pila)
+        let matricePrecedente = cronologiaStati.pop();
+
+        // Ripristina la griglia con i vecchi valori
+        aggiornaGriglia(matricePrecedente);
+        
+        console.log("Stato ripristinato. Stati rimanenti in memoria: " + cronologiaStati.length);
+    } else {
+        alert("Nessun altro passaggio da annullare!");
+    }
+}
+
+function aggiornaGriglia(mat) {
+    for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+            let cella = document.getElementById(`cell-${r}-${c}`);
+            cella.value = mat[r][c] === 0 ? "" : mat[r][c];
+        }
+    }
+}
+</script>
+	
+	
+</body>
+</html>

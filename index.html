@@ -160,27 +160,7 @@
 <div id="container">
         <h1 style="margin-top: 1px;">OrMa Sudoku Tutor</h1>
         
-<table id="sudoku-grid" style="border: 3px solid black;">
-    <?php for($r=0; $r<9; $r++): ?>
-    <tr>
-        <?php for($c=0; $c<9; $c++): 
-            // Calcoliamo le classi per i bordi spessi  && $c < 8  && $r < 8
-            $classes = "";
-            if (($c + 1) % 3 == 0 ) $classes .= " thick-right";
-            if (($r + 1) % 3 == 0 ) $classes .= " thick-bottom";
-            if ($c == 0 ) $classes .= " thick-left";
-            if ($r == 0 ) $classes .= " thick-top";
-        ?>
-            <td class="<?php echo $classes; ?>">
-                <input type="number" min="1" max="9" id="cell-<?php echo "$r-$c"; ?>" autocomplete="off">
-            </td>
-        <?php endfor; ?>
-    </tr>
-    <?php endfor; ?>
-</table>
-<!--<label for="sudoku-progress">Avanzamento:</label>
-<progress id="progressBar" value="0" max="100"></progress>
-<span id="progressValue">0%</span>-->
+<table id="sudoku-grid"></table>
 
 	<div id="sudoku-mask" style="width: 456px; margin: 5px auto;">
 		<h4 style="text-align: center; margin-bottom: 2px;">Opzioni di Ricerca</h4>
@@ -1764,6 +1744,8 @@ function salvaSuDatabase(nomeSudoku, livello) {
 //=========================================
 
 function caricaListaSudoku() {
+    // 1. Genera la griglia (sostituisce il vecchio codice PHP)
+    generaGrigliaHTML();
     fetch('api_sudoku.php?azione=lista')
         .then(res => res.json())
         .then(data => {
@@ -1775,7 +1757,35 @@ function caricaListaSudoku() {
         });
 }
 //=========================================
+function generaGrigliaHTML() {
+    const table = document.getElementById('sudoku-grid');
+    table.innerHTML = ""; // Pulisce la tabella se necessario
 
+    for (let r = 0; r < 9; r++) {
+        let tr = document.createElement('tr');
+        for (let c = 0; c < 9; c++) {
+            let td = document.createElement('td');
+            
+            // Applichiamo le classi per i bordi (logica presa dal tuo file originale)
+            if ((c + 1) % 3 === 0) td.className += " thick-right";
+            if ((r + 1) % 3 === 0) td.className += " thick-bottom";
+            if (c === 0) td.className += " thick-left";
+            if (r === 0) td.className += " thick-top";
+
+            let input = document.createElement('input');
+            input.type = "number";
+            input.min = 1;
+            input.max = 9;
+            input.id = `cell-${r}-${c}`;
+            input.autocomplete = "off";
+            
+            td.appendChild(input);
+            tr.appendChild(td);
+        }
+        table.appendChild(tr);
+    }
+}
+//=========================================================
 document.getElementById('menu-sudoku').addEventListener('change', function() {
     const idScelto = this.value;
     if (!idScelto) return; // Se sceglie l'opzione vuota, non fare nulla
